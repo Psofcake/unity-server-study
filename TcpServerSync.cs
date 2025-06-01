@@ -29,16 +29,11 @@ public class TcpServerSync : MonoBehaviour //Unity 컴포넌트로 동작하기 
             tcpListener = new TcpListener(IPAddress.Any, port); //TCP 연결을 수신하는 리스너 객체를 생성
             tcpListener.Start();    // 클라이언트 연결 수신을 시작.
             Debug.Log("Server Start!:"+port);
-            /*
-             IPAddress.Any는 "모든 네트워크 인터페이스(IP주소)"를 의미한다.
-             보안상 의도적으로 특정 IP만 받도록 제한하려면 모든 연결을 받은 후 허용된 IP인지 검사해서 연결할지 거부할지 결정하는 방식으로 구현한다.
-             또는, 특정 IP에서만 수신하고 싶다면 IPAddress.Parse("192.168.0.10")처럼 명시할 수도 있다.
-             아주 민감한 시스템이라면 더 복잡한 인증 방식이나 방화벽 설정으로 사전 차단하는 것이 더 좋을 수도 있다. 
-             */
 
-            while(true) //동기 서버이므로 while 루프를 돌며 항상 대기하는 상태를 유지한다.
+            while(true) //동기 서버이므로 while 루프를 돌며 항상 대기하는 상태를 유지한다. 
             {
-                connectedClient = tcpListener.AcceptTcpClient();    //연결 수신 후, 연결된 TcpClient 객체를 connectedClient에 저장.
+                //클라이언트가 연결 요청을 보낼 때까지 대기. 연결이 올 때까지 블로킹이 발생한다. 연결을 수락한 후 연결된 TcpClient 객체를 connectedClient에 반환.
+                connectedClient = tcpListener.AcceptTcpClient();   //tcpListener.Stop() 호출로 서버 소켓이 강제로 닫혔다면 루프를 중단하고 catch-finally로 가서 자원을 정리한다.
                 Debug.Log("Client connected");
 
                 HandleClient(connectedClient);
@@ -50,38 +45,37 @@ public class TcpServerSync : MonoBehaviour //Unity 컴포넌트로 동작하기 
         }
         finally
         {
-            if(tcpListener != null) //포트가 이미 사용중이거나, 시스템에 네트워크 리소스가 부족한 경우 TcpListener 생성 중 예외가 발생할 수 있다.
+            if(tcpListener != null) //포트가 이미 사용중이거나, 시스템에 네트워크 리소스가 부족한 경우 TcpListener 생성 중 예외가 발생할 수 있다. (tcpListener가 null이 될 수 있다.)
             {
-                tcpListener.Stop(); // 이에 해당하는 경우 클라이언트 연결 수신을 중지한다.
+                tcpListener.Stop(); // tcpListener가 null이 아니라면, 클라이언트 연결 수신을 중지한다. (NullReferenceException을 방지하기 위함)
             }
         }
     }
     
     private void HandleClient(TcpClient client)
-    {
-      using(NetworkStream stream = client.GetStream())
+    { //using : 자원을 자동으로 해제하기 위한 구문. 특히 스트림, 파일, 소켓 등 외부 자원을 사용할 때 매우 중요하다.
+      using(NetworkStream stream = client.GetStream())  //using (...) 에서 선언된 NetworkStream 객체 stream은, 블록이 끝날 때 자동으로 .Dispose()가 호출되어 자원을 정리한다.
       {
-         byte[] buffer = new byte[1024];
-         int bytesRead;
+         byte[] buffer = new byte[1024];    //한 번의 통신에서 가져올 수 있는 데이터의 크기 (1KB)
+         int bytesRead; //읽은 바이트의 수를 저장
 
          while(true)
          {
             try
             {
+                //.Read() : buffer.Length만큼 데이터를 읽어서 배열(buffer)에 인덱스 0번부터 채워 넣는다. 그리고 실제로 읽힌 바이트 수(읽은 데이터의 길이)를 반환
                 bytesRead = stream.Read(buffer, 0, buffer.Length);
 
-                if(bytesRead ==0)
+                if(bytesRead ==0)   //상대가 정상적으로 소켓을 닫은 상태. 더 이상 받을 데이터가 없음(연결 종료 신호)
                 {
                     Debug.Log("Client Disconnected");
                     break;
                 }
                 
-                string message = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                string message = Encoding.UTF8.GetString(buffer, 0, bytesRead); // buffer에 저장된 데이터를 UTF8 인코딩 기준으로 문자열로 변환
                 Debug.Log("Received :" + message);
 
-                stream.Write(buffer, 0, bytesRead);  //server to client
-
-
+                stream.Write(buffer, 0, bytesRead);  //server to client (실제로 읽은 바이트 수 만큼만 전송. 즉, 유효한 데이터만 보냄)
             }
             catch(Exception e)
             {
@@ -93,33 +87,28 @@ public class TcpServerSync : MonoBehaviour //Unity 컴포넌트로 동작하기 
                 {
                     Debug.LogError("Client conn error");
                 }
-                break;
-
+                break;  //예외가 발생하였으므로 while 루프를 빠져나간다.
             }
-
          }
-
       }
-
-     client.Close();
-    
+      client.Close();
     }
 
     private void OnApplicationQuit() 
     {
-        if(serverThread != null && serverThread.IsAlive)
+        if(serverThread != null && serverThread.IsAlive)    //스레드가 종료되지 않고 실행중이라면 true, 시작되지 않았거나, 예외로 중단되었거나, 이미 종료되었으면 false.
         {
-            serverThread.Abort();
-        }   
-
+            serverThread.Abort();   //스레드가 실행중이던 작업을 강제로 종료.
+        } 
+        
         if(tcpListener != null)
         {
-            tcpListener.Stop();
+            tcpListener.Stop(); //블로킹을 해제하기 위해 내부적으로 소켓을 닫고 SocketException을 발생시켜 루프에서 빠져나오게 함
         }
 
         if(connectedClient != null)
         {
-            connectedClient.Close();
+            connectedClient.Close();    //클라이언트와의 연결을 명시적으로 종료.
         }
     }
 
