@@ -10,7 +10,7 @@ using System.Text;
 public class TcpClientSync : MonoBehaviour
 {
     //접속할 TCP 서버의 IP주소와 포트번호
-    [SerializeField] private string serverIP = "127.0.0.1"; //localhost IP //192.168.0.0.1 
+    [SerializeField] private string serverIP = "127.0.0.1"; //localhost IP
     [SerializeField] private int serverPort = 8888;
 
     [SerializeField] private InputField inputField;
@@ -49,20 +49,19 @@ public class TcpClientSync : MonoBehaviour
         {
             Debug.LogError("Connection error :" + e.Message);
             responseText.text = "Connection Failed..";
-
         }
     }
 
     void SendData()
     {
-        if (tcpClient == null || !tcpClient.Connected)
+        if (tcpClient == null || !tcpClient.Connected) //객체,네트워크상태 체크
         {
             Debug.LogError("Not connected to server.");
             responseText.text = "Not Connected";
             return;
         }
 
-        if (inputField.text == null) inputField.text = "hi";
+        if (inputField.text == null) inputField.text = "hi";    //메시지 체크
 
         string message = inputField.text;
         if (string.IsNullOrEmpty(message))
@@ -71,11 +70,11 @@ public class TcpClientSync : MonoBehaviour
             return;
         }
 
-        byte[] data = Encoding.UTF8.GetBytes(message); //인풋필드의 텍스트를 UTF-8로 인코딩
+        byte[] data = Encoding.UTF8.GetBytes(message); //인풋필드의 텍스트를 UTF-8로 인코딩(바이트로 변경)
 
         try
         {
-            stream.Write(data, 0, data.Length); //NetworkStream을 통해 서버로 전송
+            stream.Write(data, 0, data.Length); //NetworkStream을 통해 서버로 메시지전송 (blocking 발생)
             Debug.Log("sent:" + message);
             inputField.text = "";   //입력창 비우기
         }
@@ -91,7 +90,7 @@ public class TcpClientSync : MonoBehaviour
         byte[] buffer = new byte[1024];
         int byteRead;
 
-        // 서버 연결이 종료되면 루프 종료
+        // 계속해서 수신대기. 서버 연결이 종료되면 루프 종료
         while (tcpClient != null && tcpClient.Connected)
         {
             try
