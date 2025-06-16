@@ -93,7 +93,7 @@ public class TcpServerASync : MonoBehaviour
 
     void OnApplicationQuit()    //Unity 애플리케이션이 종료될 때 호출.
     {
-        if (listenerThread != null && listenerThread.IsAlive)
+        if (listenerThread != null && listenerThread.IsAlive)   //종료시점에도 리스너스레드가 살아있다면
         {
             listenerThread.Abort(); //리스너스레드 강제 종료
         }
