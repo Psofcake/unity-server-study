@@ -32,9 +32,9 @@ public class RockPaperScissorsClient : MonoBehaviour    //서버 연결, 버튼 
         paper.onClick.AddListener(()=>SendChoice("Paper"));
         scissors.onClick.AddListener(()=>SendChoice("Scissors"));
         
-        SetButtonsActive(false);
+        SetButtonsActive(false); // 버튼 비활성화 (서버 연결 전)
 
-        await ConnectToServer();
+        await ConnectToServer(); // 버튼 비활성화 (서버 연결 전)
     }
 
     private async Task ConnectToServer()
@@ -45,12 +45,6 @@ public class RockPaperScissorsClient : MonoBehaviour    //서버 연결, 버튼 
             await client.ConnectAsync(serverIP, serverPort);
             stream = client.GetStream();
             Debug.Log("Connected to server!");
-
-            //서버로부터 클라이언트의 ID를 수신함
-            byte[] buffer = new byte[1024];
-            int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
-            clientId = int.Parse(Encoding.UTF8.GetString(buffer, 0, bytesRead));
-            Debug.Log("My Client ID: " + clientId);
 
             //비동기 메시지 수신 시작
             ReceiveMessages();
@@ -69,8 +63,8 @@ public class RockPaperScissorsClient : MonoBehaviour    //서버 연결, 버튼 
         byte[] data = Encoding.UTF8.GetBytes(choice);
         try
         {
-            await stream.WriteAsync(data, 0, data.Length);
-            SetButtonsActive(false);
+            await stream.WriteAsync(data, 0, data.Length); // 선택 전송
+            SetButtonsActive(false); // 선택 후 버튼 비활성화
         }
         catch (Exception e)
         {
@@ -80,24 +74,61 @@ public class RockPaperScissorsClient : MonoBehaviour    //서버 연결, 버튼 
 
     private async void ReceiveMessages()
     {
-        byte[] buffer = new byte[1024];
-        int bytesRead;
-
         while (true) 
         {
             try
             {
-                bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
+                // 1. 메시지 타입 읽기 (1바이트)
+                byte[] typeBuffer = new byte[1];
+                int typeBytesRead = await stream.ReadAsync(typeBuffer, 0, 1);
+                if (typeBytesRead == 0)
+                {
+                    Debug.Log("Disconnected from server.");
+                    break;
+                }
+                string messageType = Encoding.UTF8.GetString(typeBuffer);
+                
+                // 2. 메시지 길이 읽기 (4바이트, int)
+                byte[] lengthBuffer = new byte[4];
+                int lengthBytesRead = await stream.ReadAsync(lengthBuffer, 0, 4);
+                if (lengthBytesRead == 0)
+                {
+                    Debug.Log("Disconnected from server.");
+                    break;
+                }
+                int messageLength = BitConverter.ToInt32(lengthBuffer, 0);
+                
+                // 3. 메시지 데이터 읽기 (messageLength 만큼)
+                byte[] messageBuffer = new byte[messageLength];
+                int bytesRead = await stream.ReadAsync(messageBuffer, 0, messageLength);
+                
                 if (bytesRead == 0)
                 {
                     Debug.Log("Disconnected from server");
                     break;
                 }
-                
-                string message = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                string message = Encoding.UTF8.GetString(messageBuffer);
                 Debug.Log("Received: " + message);
                 
-                ProcessServerMessage(message);
+                // 서버 메시지 처리
+                if (messageType == "I") // 클라이언트 ID 수신
+                {
+                    if (int.TryParse(message, out int receivedClientId))
+                    {
+                        clientId = receivedClientId;
+                        Debug.Log("My client ID: " + clientId);
+                        resultText.text = "Connected! ID: " + clientId;
+                    }
+                    else
+                    {
+                        Debug.LogError("Invalid client ID received: " + message);
+                        // 적절한 오류 처리 (연결 종료 등)
+                    }
+                }
+                else // 다른 메시지 ("S", "R" 등)
+                {
+                    ProcessServerMessage(message);
+                }
             }
             catch(Exception e)
             {
@@ -147,12 +178,12 @@ public class RockPaperScissorsClient : MonoBehaviour    //서버 연결, 버튼 
             }
             else if (result == "Player1 Wins" && clientId == 1 || result == "Player2 Wins" && clientId == 2)
             {
-                resultText.text = "You wins!";
+                resultText.text = "You win!";
                 playerScore++;
             }
             else
             {
-                resultText.text = "You loses!";
+                resultText.text = "You lose!";
                 opponentScore++;
             }
             scoreText.text = "Score: " + playerScore+" - "+opponentScore;
