@@ -5,6 +5,11 @@ using Unity.Netcode;
 
 public class ConnectServer : MonoBehaviour
 {
+    public void StartHost()
+    {
+        NetworkManager.Singleton.StartHost();
+    }
+    
     public void ConnectedToServer()
     {
         NetworkManager.Singleton.StartClient();
