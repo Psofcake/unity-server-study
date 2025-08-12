@@ -5,7 +5,7 @@ using UnityEngine;
 
 public class ClientSingleton : MonoBehaviour
 {
-    public ClientGameManager clientGameManager;
+    public ClientGameManager clientGameManager{get; private set;}
     
     private static ClientSingleton instance;
     public static ClientSingleton Instance
@@ -26,10 +26,10 @@ public class ClientSingleton : MonoBehaviour
     }
 
     //클라이언트 생성
-    public async Task CreateClient()
+    public async Task<bool> CreateClient()
     {
         clientGameManager = new ClientGameManager();
-        await clientGameManager.InitAsync();
+        return await clientGameManager.InitAsync();
     }
     
     // Start is called before the first frame update
